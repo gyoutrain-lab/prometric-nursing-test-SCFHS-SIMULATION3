@@ -1,0 +1,2041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SCFHS Pass Prediction Engine</title>
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f6f8;
+  margin: 0;
+}
+.container {
+  max-width: 900px;
+  margin: auto;
+  background: #ffffff;
+  padding: 20px;
+  min-height: 100vh;
+}
+h1, h2 {
+  text-align: center;
+}
+.hidden { display: none; }
+
+input, button {
+  padding: 10px;
+  margin: 6px 0;
+  width: 100%;
+  font-size: 16px;
+}
+
+#timer {
+  text-align: center;
+  font-weight: bold;
+  font-size: 18px;
+  margin-bottom: 10px;
+  color: #1f2937;
+}
+
+.option {
+  border: 1px solid #ccc;
+  padding: 10px;
+  margin-top: 8px;
+  cursor: pointer;
+}
+.option:hover { background: #eef2f5; }
+.option.selected { background: #d9e8ff; }
+.option.correct { border-left: 6px solid green; }
+.option.wrong { border-left: 6px solid red; }
+
+.rationale {
+  background: #f9fafb;
+  border: 1px solid #ccc;
+  padding: 15px;
+  margin-top: 15px;
+}
+
+.report {
+  background: #f1f5f9;
+  padding: 20px;
+  margin-top: 20px;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<!-- START SCREEN -->
+<div id="startScreen">
+  <h1>SCFHS Pass Prediction Test</h1>
+  <input type="text" id="candidateName" placeholder="Full Name">
+  <input type="text" id="candidateID" placeholder="Candidate ID">
+  <button onclick="startExam()">Start Test</button>
+</div>
+
+<!-- EXAM SCREEN -->
+<div id="examScreen" class="hidden">
+  <h2 id="qCounter"></h2>
+  <div id="timer">Time Remaining: 20:00</div>
+  <p id="questionText"></p>
+  <div id="options"></div>
+
+  <button onclick="submitAnswer()">Submit Answer</button>
+
+  <div id="rationaleBox" class="rationale hidden"></div>
+  <button id="nextBtn" class="hidden" onclick="nextQuestion()">Next Question</button>
+</div>
+
+<!-- RESULT SCREEN -->
+<div id="resultScreen" class="hidden">
+  <h1>PASS PREDICTION RESULT</h1>
+  <div id="finalReport" class="report"></div>
+</div>
+
+</div>
+
+<script>
+// ================= QUESTIONS =================
+const questions = [
+{
+  q: "101. Which observation would the nurse expect to make after an amniotomy?",
+  options: [
+    { text: "Dark yellow amniotic fluid", tag: "STR" },
+    { text: "Clear amniotic fluid", tag: "SCFHS" },
+    { text: "Greenish amniotic fluid", tag: "NCLEX" },
+    { text: "Red amniotic fluid", tag: "SAFE_DELAY" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Normal amniotic fluid is clear; abnormal colors suggest complications.",
+    distractors: {
+      STR: "Dark yellow suggests infection or meconium.",
+      NCLEX: "Greenish fluid indicates fetal distress.",
+      SAFE_DELAY: "Red fluid suggests bleeding."
+    }
+  }
+},
+{
+  q: "102. The client taking Glyburide (Diabeta) should be cautioned to:",
+  options: [
+    { text: "Avoid eating sweets", tag: "STR" },
+    { text: "Report changes in urinary pattern", tag: "SAFE_DELAY" },
+    { text: "Allow three hours for onset", tag: "NCLEX" },
+    { text: "Check the glucose daily", tag: "SCFHS" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Monitoring blood glucose daily is essential to prevent hypoglycemia.",
+    distractors: {
+      STR: "Diet modification alone is insufficient.",
+      SAFE_DELAY: "Urinary changes are not primary concerns.",
+      NCLEX: "Onset timing is not a safety priority."
+    }
+  }
+},
+{
+  q: "103. The obstetric client’s fetal heart rate is 80–90 during contractions. The first action the nurse should take is:",
+  options: [
+    { text: "Reposition the monitor", tag: "SAFE_DELAY" },
+    { text: "Turn the client to her left side", tag: "SCFHS" },
+    { text: "Ask the client to ambulate", tag: "STR" },
+    { text: "Prepare the client for delivery", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Left lateral positioning improves uteroplacental perfusion.",
+    distractors: {
+      SAFE_DELAY: "Monitor adjustment delays intervention.",
+      STR: "Ambulation may worsen fetal distress.",
+      NCLEX: "Delivery preparation is premature."
+    }
+  }
+},
+{
+  q: "104. Arterial ulcers are best described as ulcers that:",
+  options: [
+    { text: "Are smooth in texture", tag: "SAFE_DELAY" },
+    { text: "Have irregular borders", tag: "STR" },
+    { text: "Are cool to touch", tag: "SCFHS" },
+    { text: "Are painful to touch", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Arterial ulcers have poor perfusion and are typically cool.",
+    distractors: {
+      SAFE_DELAY: "Texture is not defining.",
+      STR: "Venous ulcers have irregular borders.",
+      NCLEX: "Pain alone is nonspecific."
+    }
+  }
+},
+{
+  q: "105. A vaginal exam reveals a footling breech presentation. The nurse should take which action?",
+  options: [
+    { text: "Anticipate the need for a Caesarean section", tag: "SCFHS" },
+    { text: "Apply an internal fetal monitor", tag: "STR" },
+    { text: "Place the client in Genu Pectoral position", tag: "SAFE_DELAY" },
+    { text: "Perform an ultrasound", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Footling breech increases cord prolapse risk; C-section is anticipated.",
+    distractors: {
+      STR: "Internal monitoring is contraindicated.",
+      SAFE_DELAY: "Positioning does not resolve presentation.",
+      NCLEX: "Diagnosis is already established."
+    }
+  }
+},
+{
+  q: "106. The rationale for applying an external fetal monitor is:",
+  options: [
+    { text: "The cervix is closed", tag: "STR" },
+    { text: "The membranes are still intact", tag: "SCFHS" },
+    { text: "The fetal heart tones are normal", tag: "SAFE_DELAY" },
+    { text: "The contractions are intense", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Internal monitors require ruptured membranes.",
+    distractors: {
+      STR: "Cervical dilation is unrelated.",
+      SAFE_DELAY: "Normal FHR does not determine monitor type.",
+      NCLEX: "Contraction strength is irrelevant."
+    }
+  }
+},
+{
+  q: "107. Which nursing diagnosis is most appropriate during early labor for a primigravida?",
+  options: [
+    { text: "Impaired gas exchange related to hyperventilation", tag: "SCFHS" },
+    { text: "Altered placental perfusion", tag: "STR" },
+    { text: "Impaired physical mobility", tag: "SAFE_DELAY" },
+    { text: "Potential fluid volume deficit", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Hyperventilation commonly occurs in early labor.",
+    distractors: {
+      STR: "Perfusion issues are not expected.",
+      SAFE_DELAY: "Mobility is usually maintained.",
+      NCLEX: "Fluid deficit is not primary."
+    }
+  }
+},
+{
+  q: "108. Late decelerations are most commonly caused by:",
+  options: [
+    { text: "The baby is sleeping", tag: "SAFE_DELAY" },
+    { text: "Umbilical cord compression", tag: "STR" },
+    { text: "Head compression", tag: "NCLEX" },
+    { text: "Utero-placental insufficiency", tag: "SCFHS" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Late decelerations reflect impaired placental oxygen exchange.",
+    distractors: {
+      SAFE_DELAY: "Sleep does not cause decelerations.",
+      STR: "Cord compression causes variable decelerations.",
+      NCLEX: "Head compression causes early decelerations."
+    }
+  }
+},
+{
+  q: "109. Variable decelerations are best managed initially by:",
+  options: [
+    { text: "Notify the physician", tag: "SAFE_DELAY" },
+    { text: "Start an IV", tag: "STR" },
+    { text: "Reposition the client", tag: "SCFHS" },
+    { text: "Readjust the monitor", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Repositioning relieves umbilical cord compression.",
+    distractors: {
+      SAFE_DELAY: "Immediate intervention comes first.",
+      STR: "IV fluids are secondary.",
+      NCLEX: "Monitor adjustment does not treat cause."
+    }
+  }
+},
+{
+  q: "110. Which finding represents an ominous fetal heart rate pattern?",
+  options: [
+    { text: "FHR 120–130 bpm", tag: "SAFE_DELAY" },
+    { text: "Baseline variability of 6–10 bpm", tag: "STR" },
+    { text: "Accelerations with fetal movement", tag: "NCLEX" },
+    { text: "Recurrent rate of 90–100 bpm at end of contractions", tag: "SCFHS" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Persistent bradycardia late in contractions signals fetal compromise.",
+    distractors: {
+      SAFE_DELAY: "Normal baseline.",
+      STR: "Moderate variability is reassuring.",
+      NCLEX: "Accelerations are normal."
+    }
+  }
+},
+{
+  q: "111. A postpartum client reports severe perineal pain and pressure. The nurse suspects a hematoma. What is the PRIORITY action?",
+  options: [
+    { text: "Apply ice packs to the perineum", tag: "STR" },
+    { text: "Assess vital signs and pain level", tag: "SCFHS" },
+    { text: "Encourage the client to ambulate", tag: "SAFE_DELAY" },
+    { text: "Document findings and reassess later", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "A hematoma can cause concealed hemorrhage; assessment of vitals and pain is priority.",
+    distractors: {
+      STR: "Ice may be used after assessment.",
+      SAFE_DELAY: "Ambulation may worsen bleeding.",
+      NCLEX: "Documentation delays intervention."
+    }
+  }
+},
+{
+  q: "112. Which finding indicates effective breastfeeding during the first 24 hours?",
+  options: [
+    { text: "Infant feeds every 6 hours", tag: "SAFE_DELAY" },
+    { text: "Audible swallowing during feeding", tag: "SCFHS" },
+    { text: "Infant sleeps immediately after latch", tag: "STR" },
+    { text: "Mother reports nipple tenderness", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Audible swallowing confirms milk transfer.",
+    distractors: {
+      SAFE_DELAY: "Newborns feed more frequently.",
+      STR: "Sleep does not indicate intake.",
+      NCLEX: "Tenderness does not confirm effectiveness."
+    }
+  }
+},
+{
+  q: "113. A client receiving oxytocin develops uterine tachysystole. What is the FIRST nursing action?",
+  options: [
+    { text: "Increase the oxytocin infusion", tag: "SAFE_DELAY" },
+    { text: "Stop the oxytocin infusion", tag: "SCFHS" },
+    { text: "Administer pain medication", tag: "STR" },
+    { text: "Prepare for cesarean delivery", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Stopping oxytocin reduces excessive uterine stimulation.",
+    distractors: {
+      SAFE_DELAY: "Increasing worsens tachysystole.",
+      STR: "Pain control does not address cause.",
+      NCLEX: "Surgery is not the first step."
+    }
+  }
+},
+{
+  q: "114. Which assessment finding is most concerning in a newborn?",
+  options: [
+    { text: "Respiratory rate of 40 breaths/min", tag: "SAFE_DELAY" },
+    { text: "Acrocyanosis of hands and feet", tag: "STR" },
+    { text: "Nasal flaring with grunting", tag: "SCFHS" },
+    { text: "Heart rate of 130 bpm", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Nasal flaring and grunting indicate respiratory distress.",
+    distractors: {
+      SAFE_DELAY: "Normal respiratory rate.",
+      STR: "Acrocyanosis is common initially.",
+      NCLEX: "Heart rate is within normal range."
+    }
+  }
+},
+{
+  q: "115. The nurse is caring for a client with preeclampsia. Which medication should be readily available?",
+  options: [
+    { text: "Oxytocin", tag: "SAFE_DELAY" },
+    { text: "Magnesium sulfate", tag: "SCFHS" },
+    { text: "Methylergonovine", tag: "STR" },
+    { text: "Terbutaline", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Magnesium sulfate prevents seizures in preeclampsia.",
+    distractors: {
+      SAFE_DELAY: "Oxytocin is for labor induction.",
+      STR: "Methylergonovine increases blood pressure.",
+      NCLEX: "Terbutaline is a tocolytic."
+    }
+  }
+},
+{
+  q: "116. A laboring client reports sudden relief of pain followed by bright red vaginal bleeding. The nurse suspects:",
+  options: [
+    { text: "Placenta previa", tag: "STR" },
+    { text: "Uterine rupture", tag: "SCFHS" },
+    { text: "Bloody show", tag: "SAFE_DELAY" },
+    { text: "Amniotic fluid leak", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Sudden pain relief with bleeding suggests uterine rupture.",
+    distractors: {
+      STR: "Placenta previa causes painless bleeding.",
+      SAFE_DELAY: "Bloody show is minimal.",
+      NCLEX: "Fluid leakage is not bloody."
+    }
+  }
+},
+{
+  q: "117. Which action best prevents postpartum uterine atony?",
+  options: [
+    { text: "Encourage early ambulation", tag: "SAFE_DELAY" },
+    { text: "Massage the fundus after delivery", tag: "SCFHS" },
+    { text: "Limit oral fluids", tag: "STR" },
+    { text: "Delay breastfeeding", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Fundal massage promotes uterine contraction.",
+    distractors: {
+      SAFE_DELAY: "Ambulation is secondary.",
+      STR: "Fluid restriction is inappropriate.",
+      NCLEX: "Breastfeeding enhances uterine tone."
+    }
+  }
+},
+{
+  q: "118. Which sign indicates effective placental separation?",
+  options: [
+    { text: "Maternal hypotension", tag: "SAFE_DELAY" },
+    { text: "Sudden gush of blood", tag: "SCFHS" },
+    { text: "Fetal heart rate deceleration", tag: "STR" },
+    { text: "Uterine relaxation", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "A gush of blood is a classic sign of placental separation.",
+    distractors: {
+      SAFE_DELAY: "Hypotension is abnormal.",
+      STR: "FHR is irrelevant postpartum.",
+      NCLEX: "The uterus becomes firm, not relaxed."
+    }
+  }
+},
+{
+  q: "119. The nurse notes a boggy uterus 2 hours postpartum. What is the FIRST action?",
+  options: [
+    { text: "Notify the healthcare provider", tag: "SAFE_DELAY" },
+    { text: "Assess lochia amount", tag: "STR" },
+    { text: "Perform fundal massage", tag: "SCFHS" },
+    { text: "Administer prescribed antibiotics", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Fundal massage corrects uterine atony.",
+    distractors: {
+      SAFE_DELAY: "Immediate nursing intervention is required.",
+      STR: "Assessment follows intervention.",
+      NCLEX: "Antibiotics are unrelated."
+    }
+  }
+},
+{
+  q: "120. Which maternal factor places a newborn at highest risk for hypoglycemia?",
+  options: [
+    { text: "Maternal hypertension", tag: "STR" },
+    { text: "Gestational diabetes", tag: "SCFHS" },
+    { text: "Maternal anemia", tag: "SAFE_DELAY" },
+    { text: "Prolonged labor", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Infants of diabetic mothers are at high risk for hypoglycemia.",
+    distractors: {
+      STR: "Hypertension affects perfusion.",
+      SAFE_DELAY: "Anemia does not directly cause neonatal hypoglycemia.",
+      NCLEX: "Labor duration is not primary."
+    }
+  }
+},
+{
+  q: "121. A newborn of a diabetic mother is jittery and lethargic. What is the PRIORITY nursing action?",
+  options: [
+    { text: "Place the newborn under a radiant warmer", tag: "SAFE_DELAY" },
+    { text: "Check the newborn’s blood glucose level", tag: "SCFHS" },
+    { text: "Administer oxygen via nasal cannula", tag: "STR" },
+    { text: "Notify the pediatrician immediately", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Jitteriness and lethargy indicate hypoglycemia; glucose assessment is priority.",
+    distractors: {
+      SAFE_DELAY: "Thermal support does not address hypoglycemia.",
+      STR: "Oxygen is not indicated.",
+      NCLEX: "Assessment precedes notification."
+    }
+  }
+},
+{
+  q: "122. Which finding best indicates successful involution of the uterus?",
+  options: [
+    { text: "Uterus is boggy and midline", tag: "SAFE_DELAY" },
+    { text: "Fundus firm and descending daily", tag: "SCFHS" },
+    { text: "Lochia rubra persists for 2 weeks", tag: "STR" },
+    { text: "Fundus displaced to the right", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "A firm fundus that descends daily indicates normal involution.",
+    distractors: {
+      SAFE_DELAY: "Boggy uterus suggests atony.",
+      STR: "Prolonged rubra indicates hemorrhage.",
+      NCLEX: "Displacement suggests bladder distention."
+    }
+  }
+},
+{
+  q: "123. The nurse prepares a client for amniocentesis. Which instruction is most important?",
+  options: [
+    { text: "Void before the procedure", tag: "STR" },
+    { text: "Remain NPO for 8 hours", tag: "SAFE_DELAY" },
+    { text: "Report decreased fetal movement afterward", tag: "SCFHS" },
+    { text: "Expect mild vaginal bleeding", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Decreased fetal movement may indicate fetal compromise.",
+    distractors: {
+      STR: "Bladder status depends on gestational age.",
+      SAFE_DELAY: "NPO status is not required.",
+      NCLEX: "Bleeding is not expected."
+    }
+  }
+},
+{
+  q: "124. Which condition places a pregnant client at highest risk for postpartum hemorrhage?",
+  options: [
+    { text: "Precipitous labor", tag: "SCFHS" },
+    { text: "Gestational hypertension", tag: "STR" },
+    { text: "Iron-deficiency anemia", tag: "SAFE_DELAY" },
+    { text: "Rh incompatibility", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Rapid labor can cause uterine fatigue and atony.",
+    distractors: {
+      STR: "Hypertension affects perfusion.",
+      SAFE_DELAY: "Anemia worsens outcomes but does not cause hemorrhage.",
+      NCLEX: "Rh incompatibility affects fetus."
+    }
+  }
+},
+{
+  q: "125. Which finding in a postpartum client requires immediate intervention?",
+  options: [
+    { text: "Lochia serosa on day 3", tag: "SAFE_DELAY" },
+    { text: "Temperature of 99.4°F (37.4°C)", tag: "STR" },
+    { text: "Saturation of one pad per hour", tag: "SCFHS" },
+    { text: "Mild uterine cramping", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Heavy bleeding indicates possible postpartum hemorrhage.",
+    distractors: {
+      SAFE_DELAY: "Serosa is normal.",
+      STR: "Low-grade temperature is common.",
+      NCLEX: "Cramping is expected."
+    }
+  }
+},
+{
+  q: "126. Which assessment best determines fetal well-being during labor?",
+  options: [
+    { text: "Maternal blood pressure", tag: "STR" },
+    { text: "Fetal heart rate variability", tag: "SCFHS" },
+    { text: "Strength of uterine contractions", tag: "SAFE_DELAY" },
+    { text: "Cervical dilation", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Moderate variability indicates adequate fetal oxygenation.",
+    distractors: {
+      STR: "Maternal BP is indirect.",
+      SAFE_DELAY: "Contraction strength is maternal.",
+      NCLEX: "Dilation reflects labor progress."
+    }
+  }
+},
+{
+  q: "127. Which newborn assessment finding requires immediate follow-up?",
+  options: [
+    { text: "Caput succedaneum", tag: "SAFE_DELAY" },
+    { text: "Cephalohematoma", tag: "STR" },
+    { text: "Central cyanosis", tag: "SCFHS" },
+    { text: "Transient acrocyanosis", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Central cyanosis indicates inadequate oxygenation.",
+    distractors: {
+      SAFE_DELAY: "Caput resolves spontaneously.",
+      STR: "Cephalohematoma is localized bleeding.",
+      NCLEX: "Acrocyanosis is normal initially."
+    }
+  }
+},
+{
+  q: "128. The nurse should suspect endometritis when a postpartum client has:",
+  options: [
+    { text: "Foul-smelling lochia and uterine tenderness", tag: "SCFHS" },
+    { text: "Scant lochia and firm fundus", tag: "SAFE_DELAY" },
+    { text: "Mild perineal discomfort", tag: "STR" },
+    { text: "Increased appetite", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Infection presents with foul lochia and uterine pain.",
+    distractors: {
+      SAFE_DELAY: "Findings indicate normal recovery.",
+      STR: "Perineal discomfort is expected.",
+      NCLEX: "Appetite changes are unrelated."
+    }
+  }
+},
+{
+  q: "129. Which action reduces the risk of neonatal hypothermia?",
+  options: [
+    { text: "Delaying first bath", tag: "SCFHS" },
+    { text: "Placing newborn in crib immediately", tag: "SAFE_DELAY" },
+    { text: "Removing wet blankets quickly", tag: "STR" },
+    { text: "Encouraging early ambulation", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Delaying bathing prevents heat loss.",
+    distractors: {
+      SAFE_DELAY: "Immediate crib placement increases heat loss.",
+      STR: "Removing wet linens helps but is secondary.",
+      NCLEX: "Ambulation is maternal."
+    }
+  }
+},
+{
+  q: "130. Which maternal condition is a contraindication to breastfeeding?",
+  options: [
+    { text: "Hepatitis B infection", tag: "SAFE_DELAY" },
+    { text: "Active untreated tuberculosis", tag: "SCFHS" },
+    { text: "Gestational diabetes", tag: "STR" },
+    { text: "Postpartum depression", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Untreated active TB can be transmitted via close contact.",
+    distractors: {
+      SAFE_DELAY: "HBV is not a contraindication.",
+      STR: "Diabetes is not a contraindication.",
+      NCLEX: "Depression does not prohibit breastfeeding."
+    }
+  }
+},
+{
+  q: "131. A pregnant client at 32 weeks reports sudden painless vaginal bleeding. The nurse suspects:",
+  options: [
+    { text: "Placenta previa", tag: "SCFHS" },
+    { text: "Placental abruption", tag: "STR" },
+    { text: "Uterine rupture", tag: "NCLEX" },
+    { text: "Bloody show", tag: "SAFE_DELAY" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Placenta previa presents with painless bright red bleeding.",
+    distractors: {
+      STR: "Abruption causes painful bleeding.",
+      NCLEX: "Rupture presents with severe pain.",
+      SAFE_DELAY: "Bloody show is minimal."
+    }
+  }
+},
+{
+  q: "132. Which intervention is most effective in preventing neonatal infection?",
+  options: [
+    { text: "Administer vitamin K injection", tag: "SAFE_DELAY" },
+    { text: "Apply erythromycin eye ointment", tag: "SCFHS" },
+    { text: "Maintain newborn warmth", tag: "STR" },
+    { text: "Initiate early feeding", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Erythromycin prevents ophthalmia neonatorum.",
+    distractors: {
+      SAFE_DELAY: "Vitamin K prevents bleeding.",
+      STR: "Warmth supports thermoregulation.",
+      NCLEX: "Feeding supports glucose stability."
+    }
+  }
+},
+{
+  q: "133. A client receiving magnesium sulfate shows decreased deep tendon reflexes. What is the PRIORITY action?",
+  options: [
+    { text: "Increase the infusion rate", tag: "SAFE_DELAY" },
+    { text: "Stop the infusion and notify provider", tag: "SCFHS" },
+    { text: "Administer oxytocin", tag: "STR" },
+    { text: "Reassess in 30 minutes", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Absent or decreased reflexes indicate magnesium toxicity.",
+    distractors: {
+      SAFE_DELAY: "Increasing worsens toxicity.",
+      STR: "Oxytocin is unrelated.",
+      NCLEX: "Delay risks respiratory depression."
+    }
+  }
+},
+{
+  q: "134. Which finding best indicates fetal lung maturity?",
+  options: [
+    { text: "Presence of phosphatidylglycerol", tag: "SCFHS" },
+    { text: "Low lecithin level", tag: "SAFE_DELAY" },
+    { text: "Decreased surfactant", tag: "STR" },
+    { text: "Elevated bilirubin", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Phosphatidylglycerol confirms surfactant maturity.",
+    distractors: {
+      SAFE_DELAY: "Low lecithin suggests immaturity.",
+      STR: "Decreased surfactant increases RDS risk.",
+      NCLEX: "Bilirubin is unrelated."
+    }
+  }
+},
+{
+  q: "135. A laboring client is placed in a side-lying position primarily to:",
+  options: [
+    { text: "Increase uterine contractions", tag: "SAFE_DELAY" },
+    { text: "Reduce supine hypotension", tag: "SCFHS" },
+    { text: "Promote fetal descent", tag: "STR" },
+    { text: "Decrease maternal pain", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Side-lying prevents vena cava compression.",
+    distractors: {
+      SAFE_DELAY: "Contractions are not increased.",
+      STR: "Descent depends on pelvic anatomy.",
+      NCLEX: "Pain relief is secondary."
+    }
+  }
+},
+{
+  q: "136. Which newborn reflex indicates neurologic integrity?",
+  options: [
+    { text: "Moro reflex", tag: "SCFHS" },
+    { text: "Rooting reflex", tag: "STR" },
+    { text: "Babinski reflex", tag: "SAFE_DELAY" },
+    { text: "Stepping reflex", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "The Moro reflex assesses CNS function.",
+    distractors: {
+      STR: "Rooting aids feeding.",
+      SAFE_DELAY: "Babinski is normal in infants.",
+      NCLEX: "Stepping disappears early."
+    }
+  }
+},
+{
+  q: "137. Which assessment finding suggests postpartum infection?",
+  options: [
+    { text: "Lochia alba on day 10", tag: "SAFE_DELAY" },
+    { text: "Chills and uterine tenderness", tag: "SCFHS" },
+    { text: "Mild afterpains", tag: "STR" },
+    { text: "Temperature of 99°F", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Chills and uterine pain indicate infection.",
+    distractors: {
+      SAFE_DELAY: "Alba is normal late postpartum.",
+      STR: "Afterpains are expected.",
+      NCLEX: "Low-grade temperature is common."
+    }
+  }
+},
+{
+  q: "138. Which nursing action best prevents umbilical cord infection?",
+  options: [
+    { text: "Cover the stump with gauze", tag: "SAFE_DELAY" },
+    { text: "Clean with alcohol at each diaper change", tag: "SCFHS" },
+    { text: "Apply petroleum jelly", tag: "STR" },
+    { text: "Submerge in water daily", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Keeping the cord clean and dry prevents infection.",
+    distractors: {
+      SAFE_DELAY: "Covering traps moisture.",
+      STR: "Petroleum delays drying.",
+      NCLEX: "Submersion increases infection risk."
+    }
+  }
+},
+{
+  q: "139. Which finding indicates a reassuring fetal heart rate pattern?",
+  options: [
+    { text: "Minimal variability", tag: "SAFE_DELAY" },
+    { text: "Late decelerations", tag: "STR" },
+    { text: "Moderate variability", tag: "SCFHS" },
+    { text: "Prolonged decelerations", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Moderate variability reflects adequate oxygenation.",
+    distractors: {
+      SAFE_DELAY: "Minimal variability is concerning.",
+      STR: "Late decelerations indicate insufficiency.",
+      NCLEX: "Prolonged decelerations are abnormal."
+    }
+  }
+},
+{
+  q: "140. Which maternal assessment finding requires immediate reporting?",
+  options: [
+    { text: "Blood pressure 160/110 mmHg", tag: "SCFHS" },
+    { text: "Mild pedal edema", tag: "SAFE_DELAY" },
+    { text: "Weight gain of 1 kg", tag: "STR" },
+    { text: "Occasional headache", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Severe hypertension indicates risk of eclampsia.",
+    distractors: {
+      SAFE_DELAY: "Edema is common.",
+      STR: "Weight gain may be normal.",
+      NCLEX: "Occasional headache is nonspecific."
+    }
+  }
+},
+{
+  q: "141. A postpartum client suddenly develops shortness of breath, chest pain, and tachycardia. The nurse suspects:",
+  options: [
+    { text: "Amniotic fluid embolism", tag: "SCFHS" },
+    { text: "Pulmonary edema", tag: "STR" },
+    { text: "Postpartum hemorrhage", tag: "SAFE_DELAY" },
+    { text: "Endometritis", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Sudden respiratory distress and cardiovascular collapse suggest amniotic fluid embolism.",
+    distractors: {
+      STR: "Pulmonary edema develops more gradually.",
+      SAFE_DELAY: "Hemorrhage presents with bleeding.",
+      NCLEX: "Endometritis causes fever and uterine tenderness."
+    }
+  }
+},
+{
+  q: "142. Which finding indicates normal adaptation to extrauterine life in a newborn?",
+  options: [
+    { text: "Persistent central cyanosis", tag: "SAFE_DELAY" },
+    { text: "Irregular respirations with periods of apnea < 10 seconds", tag: "SCFHS" },
+    { text: "Grunting and nasal flaring", tag: "STR" },
+    { text: "Heart rate below 90 bpm", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Newborn breathing is irregular with brief apnea episodes.",
+    distractors: {
+      SAFE_DELAY: "Central cyanosis is abnormal.",
+      STR: "Grunting indicates respiratory distress.",
+      NCLEX: "Bradycardia is concerning."
+    }
+  }
+},
+{
+  q: "143. The nurse caring for a client with HELLP syndrome should anticipate which intervention?",
+  options: [
+    { text: "Strict intake and output monitoring", tag: "STR" },
+    { text: "Immediate delivery of the fetus", tag: "SCFHS" },
+    { text: "Administration of tocolytics", tag: "SAFE_DELAY" },
+    { text: "Routine outpatient monitoring", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "HELLP syndrome is life-threatening and requires prompt delivery.",
+    distractors: {
+      STR: "I&O monitoring is supportive only.",
+      SAFE_DELAY: "Tocolytics are contraindicated.",
+      NCLEX: "Outpatient care is unsafe."
+    }
+  }
+},
+{
+  q: "144. Which assessment best identifies postpartum bladder distention?",
+  options: [
+    { text: "Fundus firm and midline", tag: "SAFE_DELAY" },
+    { text: "Uterus displaced upward and to the side", tag: "SCFHS" },
+    { text: "Decreased lochia flow", tag: "STR" },
+    { text: "Increased uterine cramping", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "A distended bladder displaces the uterus from midline.",
+    distractors: {
+      SAFE_DELAY: "Midline fundus is normal.",
+      STR: "Lochia changes are nonspecific.",
+      NCLEX: "Cramping occurs normally."
+    }
+  }
+},
+{
+  q: "145. Which medication is administered to prevent Rh isoimmunization?",
+  options: [
+    { text: "Oxytocin", tag: "SAFE_DELAY" },
+    { text: "Rho(D) immune globulin", tag: "SCFHS" },
+    { text: "Magnesium sulfate", tag: "STR" },
+    { text: "Methylergonovine", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Rho(D) immune globulin prevents maternal antibody formation.",
+    distractors: {
+      SAFE_DELAY: "Oxytocin stimulates contractions.",
+      STR: "Magnesium prevents seizures.",
+      NCLEX: "Methylergonovine treats hemorrhage."
+    }
+  }
+},
+{
+  q: "146. A newborn is diagnosed with hyperbilirubinemia. Which intervention is expected?",
+  options: [
+    { text: "Increase formula concentration", tag: "SAFE_DELAY" },
+    { text: "Initiate phototherapy", tag: "SCFHS" },
+    { text: "Restrict oral intake", tag: "STR" },
+    { text: "Administer antibiotics", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Phototherapy reduces bilirubin levels.",
+    distractors: {
+      SAFE_DELAY: "Formula concentration is unrelated.",
+      STR: "Intake restriction worsens condition.",
+      NCLEX: "Antibiotics are not indicated."
+    }
+  }
+},
+{
+  q: "147. Which sign indicates impending eclampsia?",
+  options: [
+    { text: "Mild dependent edema", tag: "SAFE_DELAY" },
+    { text: "Hyperreflexia and clonus", tag: "SCFHS" },
+    { text: "Blood pressure 130/80 mmHg", tag: "STR" },
+    { text: "Increased urinary output", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Hyperreflexia and clonus signal CNS irritability.",
+    distractors: {
+      SAFE_DELAY: "Edema is common.",
+      STR: "BP is within acceptable range.",
+      NCLEX: "Urine output is not alarming."
+    }
+  }
+},
+{
+  q: "148. The nurse should position a newborn with suspected respiratory distress in which position?",
+  options: [
+    { text: "Supine with head flat", tag: "SAFE_DELAY" },
+    { text: "Prone with neck flexed", tag: "STR" },
+    { text: "Side-lying with neck slightly extended", tag: "SCFHS" },
+    { text: "Trendelenburg position", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Slight neck extension maintains airway patency.",
+    distractors: {
+      SAFE_DELAY: "Flat positioning compromises airway.",
+      STR: "Neck flexion obstructs airway.",
+      NCLEX: "Trendelenburg worsens breathing."
+    }
+  }
+},
+{
+  q: "149. Which finding indicates effective uterine contraction postpartum?",
+  options: [
+    { text: "Boggy uterus", tag: "SAFE_DELAY" },
+    { text: "Firm, midline fundus", tag: "SCFHS" },
+    { text: "Heavy lochia rubra", tag: "STR" },
+    { text: "Uterine tenderness", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "A firm, midline fundus indicates adequate contraction.",
+    distractors: {
+      SAFE_DELAY: "Boggy uterus suggests atony.",
+      STR: "Heavy bleeding is abnormal.",
+      NCLEX: "Tenderness may indicate infection."
+    }
+  }
+},
+{
+  q: "150. Which action best supports maternal–infant bonding immediately after birth?",
+  options: [
+    { text: "Early skin-to-skin contact", tag: "SCFHS" },
+    { text: "Delayed feeding", tag: "SAFE_DELAY" },
+    { text: "Routine nursery admission", tag: "STR" },
+    { text: "Limiting visitor access", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Skin-to-skin contact promotes bonding and thermoregulation.",
+    distractors: {
+      SAFE_DELAY: "Delayed feeding is unnecessary.",
+      STR: "Rooming-in supports bonding.",
+      NCLEX: "Visitors do not prevent bonding."
+    }
+  }
+},
+{
+  q: "151. The nurse is caring for a 30-year-old male admitted with a stab wound. While in the emergency room, a chest tube is inserted. What is the primary rationale for insertion of a chest tube?",
+  options: [
+    { text: "The tube equalizes lung expansion", tag: "SAFE_DELAY" },
+    { text: "Chest tubes drain blood/serous fluid and assist lung re-expansion", tag: "SCFHS" },
+    { text: "Chest tubes relieve pain from lung collapse", tag: "STR" },
+    { text: "Chest tubes stabilize cardiac function", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Chest tubes remove air, blood, or fluid from the pleural space to allow lung re-expansion.",
+    distractors: {
+      SAFE_DELAY: "Equalization occurs secondary to drainage.",
+      STR: "Pain relief is not the primary purpose.",
+      NCLEX: "Chest tubes do not directly stabilize cardiac function."
+    }
+  }
+},
+{
+  q: "152. A client who delivered this morning plans to breastfeed. Successful breastfeeding is most dependent on:",
+  options: [
+    { text: "Mother’s educational level", tag: "SAFE_DELAY" },
+    { text: "Infant’s birth weight", tag: "STR" },
+    { text: "Size of the mother’s breast", tag: "NCLEX" },
+    { text: "Mother’s desire to breastfeed", tag: "SCFHS" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Maternal motivation and commitment are the most important factors for successful breastfeeding.",
+    distractors: {
+      SAFE_DELAY: "Education helps but is not primary.",
+      STR: "Birth weight does not determine success.",
+      NCLEX: "Breast size does not affect milk production."
+    }
+  }
+},
+{
+  q: "153. Which finding in a laboring client should be reported to the physician immediately?",
+  options: [
+    { text: "Scant bloody discharge", tag: "SAFE_DELAY" },
+    { text: "Frequent urination", tag: "STR" },
+    { text: "Green-tinged amniotic fluid", tag: "SCFHS" },
+    { text: "Moderate uterine contractions", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Green amniotic fluid indicates meconium and possible fetal distress.",
+    distractors: {
+      SAFE_DELAY: "Bloody show is expected.",
+      STR: "Urinary frequency is common.",
+      NCLEX: "Moderate contractions are normal."
+    }
+  }
+},
+{
+  q: "154. Which statement correctly describes how to measure the duration of contractions?",
+  options: [
+    { text: "Beginning of one contraction to the beginning of the next", tag: "STR" },
+    { text: "End of one contraction to beginning of the next", tag: "SAFE_DELAY" },
+    { text: "Beginning of a contraction to the end of the same contraction", tag: "SCFHS" },
+    { text: "Peak of contraction to the end", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Duration is measured from the start of a contraction until it ends.",
+    distractors: {
+      STR: "That measures frequency.",
+      SAFE_DELAY: "That measures resting time.",
+      NCLEX: "Peak timing is incorrect."
+    }
+  }
+},
+{
+  q: "155. A client is receiving IV Pitocin for induction of labor. The nurse should closely monitor for:",
+  options: [
+    { text: "Maternal hypoglycemia", tag: "SAFE_DELAY" },
+    { text: "Fetal bradycardia", tag: "SCFHS" },
+    { text: "Maternal hyperreflexia", tag: "STR" },
+    { text: "Increased fetal movement", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Pitocin can cause uterine hyperstimulation leading to fetal bradycardia.",
+    distractors: {
+      SAFE_DELAY: "Hypoglycemia is unrelated.",
+      STR: "Hyperreflexia is linked to magnesium sulfate.",
+      NCLEX: "Movement does not indicate complications."
+    }
+  }
+},
+{
+  q: "156. Which statement is true regarding insulin needs during pregnancy?",
+  options: [
+    { text: "Insulin requirements moderate as pregnancy progresses", tag: "SAFE_DELAY" },
+    { text: "Insulin needs decrease in the second trimester", tag: "STR" },
+    { text: "Elevated hCG decreases insulin needs", tag: "NCLEX" },
+    { text: "Fetal development depends on adequate insulin regulation", tag: "SCFHS" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Tight glucose control is essential for normal fetal growth and development.",
+    distractors: {
+      SAFE_DELAY: "Insulin needs usually increase.",
+      STR: "Needs do not decrease in second trimester.",
+      NCLEX: "hCG does not reduce insulin needs."
+    }
+  }
+},
+{
+  q: "157. A prenatal client has a blood pressure of 180/96. The nurse’s priority action is to:",
+  options: [
+    { text: "Provide a calm environment", tag: "STR" },
+    { text: "Obtain a diet history", tag: "SAFE_DELAY" },
+    { text: "Administer an analgesic", tag: "NCLEX" },
+    { text: "Assess fetal heart tones", tag: "SCFHS" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Severe hypertension threatens uteroplacental perfusion; fetal status must be assessed.",
+    distractors: {
+      STR: "Calm environment is supportive only.",
+      SAFE_DELAY: "Diet history is not priority.",
+      NCLEX: "Analgesics do not address the cause."
+    }
+  }
+},
+{
+  q: "158. A primigravida age 42 is at increased risk for delivering an infant with:",
+  options: [
+    { text: "Down syndrome", tag: "SCFHS" },
+    { text: "Respiratory distress syndrome", tag: "STR" },
+    { text: "Turner syndrome", tag: "NCLEX" },
+    { text: "Pathologic jaundice", tag: "SAFE_DELAY" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Advanced maternal age increases risk of chromosomal abnormalities such as Down syndrome.",
+    distractors: {
+      STR: "RDS is related to prematurity.",
+      NCLEX: "Turner syndrome is not age-related.",
+      SAFE_DELAY: "Jaundice is common and multifactorial."
+    }
+  }
+},
+{
+  q: "159. A client with a missed abortion at 29 weeks is most likely treated with:",
+  options: [
+    { text: "Magnesium sulfate", tag: "STR" },
+    { text: "Calcium gluconate", tag: "SAFE_DELAY" },
+    { text: "Dinoprostone (Prostin E)", tag: "SCFHS" },
+    { text: "Bromocriptine (Parlodel)", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Dinoprostone is used to induce labor in cases of fetal demise.",
+    distractors: {
+      STR: "Magnesium prevents seizures.",
+      SAFE_DELAY: "Calcium reverses magnesium toxicity.",
+      NCLEX: "Bromocriptine suppresses lactation."
+    }
+  }
+},
+{
+  q: "160. A client with preeclampsia is receiving magnesium sulfate. BP 160/80, reflexes 1+, urine output 100 mL/hr. The nurse should:",
+  options: [
+    { text: "Continue magnesium sulfate and monitor BP", tag: "SCFHS" },
+    { text: "Stop the infusion and notify the physician", tag: "SAFE_DELAY" },
+    { text: "Slow infusion and turn client to left side", tag: "STR" },
+    { text: "Administer calcium gluconate IV push", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Findings are within therapeutic range; infusion should continue with monitoring.",
+    distractors: {
+      SAFE_DELAY: "No signs of toxicity present.",
+      STR: "Slowing infusion is unnecessary.",
+      NCLEX: "Calcium gluconate is used only for toxicity."
+    }
+  }
+},
+{
+  q: "161. Which statement correctly describes the inheritance pattern of autosomal recessive disorders?",
+  options: [
+    { text: "An affected newborn has unaffected parents", tag: "SCFHS" },
+    { text: "An affected newborn has one affected parent", tag: "STR" },
+    { text: "Affected parents have a one in four chance of passing the gene", tag: "SAFE_DELAY" },
+    { text: "Affected parents always have affected children", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Autosomal recessive disorders may occur when both parents are carriers and unaffected.",
+    distractors: {
+      STR: "One affected parent suggests autosomal dominant.",
+      SAFE_DELAY: "This statement is inaccurate as written.",
+      NCLEX: "Affected parents do not always produce affected children."
+    }
+  }
+},
+{
+  q: "162. A pregnant client asks why a serum alpha-fetoprotein test was recommended. The nurse explains it is used to detect:",
+  options: [
+    { text: "Cardiovascular defects", tag: "STR" },
+    { text: "Neurological defects", tag: "SCFHS" },
+    { text: "Pulmonary abnormalities", tag: "SAFE_DELAY" },
+    { text: "Renal malformations", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "AFP screening helps detect neural tube defects.",
+    distractors: {
+      STR: "Cardiac defects are detected by echocardiography.",
+      SAFE_DELAY: "Pulmonary defects are not detected by AFP.",
+      NCLEX: "Renal defects are not primary AFP findings."
+    }
+  }
+},
+{
+  q: "163. A pregnant client with hypothyroidism asks if thyroid medication is still needed. The nurse’s response is based on the knowledge that:",
+  options: [
+    { text: "Thyroid medication should be discontinued during pregnancy", tag: "SAFE_DELAY" },
+    { text: "Thyroid regulation is more difficult during pregnancy", tag: "SCFHS" },
+    { text: "Fetal thyroid function replaces maternal function", tag: "STR" },
+    { text: "Thyroid medication arrests fetal growth", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Pregnancy alters thyroid hormone needs; medication is usually continued and adjusted.",
+    distractors: {
+      SAFE_DELAY: "Discontinuation is unsafe.",
+      STR: "Fetal thyroid does not replace maternal regulation.",
+      NCLEX: "Medication does not arrest growth."
+    }
+  }
+},
+{
+  q: "164. During a 1-minute Apgar assessment of a full-term newborn, the nurse expects to find:",
+  options: [
+    { text: "Apical pulse of 100 bpm", tag: "SAFE_DELAY" },
+    { text: "Absent muscle tone", tag: "STR" },
+    { text: "Cyanosis of hands and feet", tag: "SCFHS" },
+    { text: "Jaundice of the skin", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Acrocyanosis is a normal finding immediately after birth.",
+    distractors: {
+      SAFE_DELAY: "Heart rate should be above 100.",
+      STR: "Absent tone is abnormal.",
+      NCLEX: "Jaundice develops later."
+    }
+  }
+},
+{
+  q: "165. A client with sickle cell anemia is in early labor. The nurse should anticipate the need for:",
+  options: [
+    { text: "Supplemental oxygen", tag: "SCFHS" },
+    { text: "Fluid restriction", tag: "SAFE_DELAY" },
+    { text: "Immediate blood transfusion", tag: "STR" },
+    { text: "Cesarean delivery", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Oxygen helps prevent sickling and hypoxia during labor.",
+    distractors: {
+      SAFE_DELAY: "Hydration is encouraged.",
+      STR: "Transfusion is not routine.",
+      NCLEX: "Cesarean is not automatic."
+    }
+  }
+},
+{
+  q: "166. Preparation for an ultrasound in a pregnant client with diabetes includes:",
+  options: [
+    { text: "Increasing fluid intake", tag: "SCFHS" },
+    { text: "Limiting ambulation", tag: "SAFE_DELAY" },
+    { text: "Administering an enema", tag: "STR" },
+    { text: "Withholding food for eight hours", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "A full bladder improves visualization during ultrasound.",
+    distractors: {
+      SAFE_DELAY: "Ambulation is not restricted.",
+      STR: "Enemas are unnecessary.",
+      NCLEX: "Fasting is not required."
+    }
+  }
+},
+{
+  q: "167. An infant weighing 8 pounds at birth is expected to weigh how much at one year?",
+  options: [
+    { text: "14 pounds", tag: "SAFE_DELAY" },
+    { text: "16 pounds", tag: "STR" },
+    { text: "18 pounds", tag: "NCLEX" },
+    { text: "24 pounds", tag: "SCFHS" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Birth weight typically triples by one year of age.",
+    distractors: {
+      SAFE_DELAY: "Too low for expected growth.",
+      STR: "Underestimates normal growth.",
+      NCLEX: "Does not reflect tripling."
+    }
+  }
+},
+{
+  q: "168. A non-stress test (NST) during pregnancy is used to:",
+  options: [
+    { text: "Determine lung maturity", tag: "SAFE_DELAY" },
+    { text: "Measure fetal activity and heart rate response", tag: "SCFHS" },
+    { text: "Assess contraction strength", tag: "STR" },
+    { text: "Induce uterine contractions", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "NST evaluates fetal well-being by monitoring heart rate with movement.",
+    distractors: {
+      SAFE_DELAY: "Lung maturity requires amniocentesis.",
+      STR: "Contraction testing is CST.",
+      NCLEX: "NST does not induce labor."
+    }
+  }
+},
+{
+  q: "169. Hypospadias in a full-term male infant is best described as:",
+  options: [
+    { text: "Absent urethral opening", tag: "SAFE_DELAY" },
+    { text: "Urethral opening on the top of the penis", tag: "STR" },
+    { text: "Enlarged urethral opening", tag: "NCLEX" },
+    { text: "Urethral opening on the underside of the penis", tag: "SCFHS" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Hypospadias is characterized by a ventral urethral opening.",
+    distractors: {
+      SAFE_DELAY: "Opening is present.",
+      STR: "Top opening is epispadias.",
+      NCLEX: "Size is not the issue."
+    }
+  }
+},
+{
+  q: "170. A gravida III para II is 8 cm dilated with complete effacement. The priority nursing diagnosis is:",
+  options: [
+    { text: "Alteration in coping related to pain", tag: "STR" },
+    { text: "Potential for injury related to precipitate delivery", tag: "SCFHS" },
+    { text: "Alteration in elimination related to anesthesia", tag: "SAFE_DELAY" },
+    { text: "Potential fluid volume deficit related to NPO status", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Advanced dilation in multiparous clients increases risk of rapid delivery.",
+    distractors: {
+      STR: "Pain is expected but not priority.",
+      SAFE_DELAY: "Elimination is secondary.",
+      NCLEX: "Fluid deficit is not immediate."
+    }
+  }
+},
+{
+  q: "171. The client with varicella will most likely have an order for which category of medication?",
+  options: [
+    { text: "Antibiotics", tag: "SAFE_DELAY" },
+    { text: "Antipyretics", tag: "STR" },
+    { text: "Antivirals", tag: "SCFHS" },
+    { text: "Anticoagulants", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Varicella is a viral infection; antiviral therapy is commonly prescribed.",
+    distractors: {
+      SAFE_DELAY: "Antibiotics do not treat viral infections.",
+      STR: "Antipyretics may relieve fever but do not treat the cause.",
+      NCLEX: "Anticoagulants have no role in varicella treatment."
+    }
+  }
+},
+{
+  q: "172. A client is admitted complaining of chest pain. Which of the following drug orders should the nurse question?",
+  options: [
+    { text: "Nitroglycerin", tag: "SCFHS" },
+    { text: "Ampicillin", tag: "SAFE_DELAY" },
+    { text: "Propranolol", tag: "NCLEX" },
+    { text: "Verapamil", tag: "STR" }
+  ],
+  correctTag: "SAFE_DELAY",
+  rationale: {
+    correct: "Ampicillin is not routinely indicated for acute chest pain without infection.",
+    distractors: {
+      SCFHS: "Nitroglycerin is appropriate for suspected cardiac ischemia.",
+      NCLEX: "Propranolol may be used in cardiac conditions.",
+      STR: "Verapamil is used for cardiac rate and rhythm control."
+    }
+  }
+},
+{
+  q: "173. Which of the following instructions should be included in the teaching for the client with rheumatoid arthritis?",
+  options: [
+    { text: "Avoid exercise because it fatigues the joints", tag: "SAFE_DELAY" },
+    { text: "Take prescribed anti-inflammatory medications with meals", tag: "SCFHS" },
+    { text: "Alternate hot and cold packs to affected joints", tag: "NCLEX" },
+    { text: "Avoid weight-bearing activity", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Anti-inflammatory drugs should be taken with meals to reduce gastric irritation.",
+    distractors: {
+      SAFE_DELAY: "Exercise is encouraged to maintain joint mobility.",
+      NCLEX: "Heat or cold may help but is not the primary teaching point.",
+      STR: "Total avoidance of weight-bearing activity is not recommended."
+    }
+  }
+},
+{
+  q: "174. A client with acute pancreatitis is experiencing severe abdominal pain. Which of the following orders should be questioned by the nurse?",
+  options: [
+    { text: "Meperidine 100 mg IM q4h PRN pain", tag: "NCLEX" },
+    { text: "Mylanta 30 ccs q4h via NG", tag: "SAFE_DELAY" },
+    { text: "Cimetidine 300 mg PO t.i.d.", tag: "STR" },
+    { text: "Morphine 8 mg IM q4h PRN pain", tag: "SCFHS" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Morphine may increase sphincter of Oddi spasm, worsening pancreatitis pain.",
+    distractors: {
+      NCLEX: "Meperidine is commonly used for pancreatitis pain.",
+      SAFE_DELAY: "Antacids may be ordered for gastric comfort.",
+      STR: "Cimetidine reduces gastric acid secretion."
+    }
+  }
+},
+{
+  q: "175. The client is admitted to the chemical dependence unit with an order for continuous observation. The nurse is aware that the doctor has ordered continuous observation because:",
+  options: [
+    { text: "Hallucinogenic drugs create both stimulant and depressant effects", tag: "SAFE_DELAY" },
+    { text: "Hallucinogenic drugs induce a state of altered perception", tag: "SCFHS" },
+    { text: "Hallucinogenic drugs produce severe respiratory depression", tag: "NCLEX" },
+    { text: "Hallucinogenic drugs induce rapid physical dependence", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Hallucinogens alter perception and reality, increasing risk of harm.",
+    distractors: {
+      SAFE_DELAY: "They do not consistently act as stimulants and depressants.",
+      NCLEX: "Severe respiratory depression is not typical.",
+      STR: "Hallucinogens cause psychological rather than physical dependence."
+    }
+  }
+},
+{
+  q: "176. A client with a history of abusing barbiturates abruptly stops taking the medication. The nurse should give priority to assessing the client for:",
+  options: [
+    { text: "Depression and suicidal ideation", tag: "SAFE_DELAY" },
+    { text: "Tachycardia and diarrhea", tag: "NCLEX" },
+    { text: "Muscle cramping and abdominal pain", tag: "STR" },
+    { text: "Tachycardia and euphoric mood", tag: "SCFHS" }
+  ],
+  correctTag: "NCLEX",
+  rationale: {
+    correct: "Barbiturate withdrawal can cause autonomic instability including tachycardia.",
+    distractors: {
+      SAFE_DELAY: "Depression may occur but is not the immediate priority.",
+      STR: "Muscle cramping is more typical of opioid withdrawal.",
+      SCFHS: "Euphoria is associated with intoxication, not withdrawal."
+    }
+  }
+},
+{
+  q: "177. During the assessment of a laboring client, the nurse notes that the FHT are loudest in the upper-right quadrant. The infant is most likely in which position?",
+  options: [
+    { text: "Right breech presentation", tag: "SCFHS" },
+    { text: "Right occipital anterior presentation", tag: "NCLEX" },
+    { text: "Left sacral anterior presentation", tag: "SAFE_DELAY" },
+    { text: "Left occipital transverse presentation", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "FHTs are loudest over the fetal back; upper quadrant suggests breech.",
+    distractors: {
+      NCLEX: "Occipital anterior is heard in lower quadrants.",
+      SAFE_DELAY: "Sacral positions apply to breech but wrong side.",
+      STR: "Occipital transverse is not heard in the upper quadrant."
+    }
+  }
+},
+{
+  q: "178. The primary physiological alteration in the development of asthma is:",
+  options: [
+    { text: "Bronchiolar inflammation and dyspnea", tag: "STR" },
+    { text: "Hypersecretion of abnormally viscous mucus", tag: "SAFE_DELAY" },
+    { text: "Infectious processes causing mucosal edema", tag: "NCLEX" },
+    { text: "Spasm of bronchiolar smooth muscle", tag: "SCFHS" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Bronchospasm is the key mechanism causing airway narrowing in asthma.",
+    distractors: {
+      STR: "Inflammation occurs but is secondary.",
+      SAFE_DELAY: "Mucus hypersecretion is not primary.",
+      NCLEX: "Asthma is not primarily infectious."
+    }
+  }
+},
+{
+  q: "179. A client with mania is unable to finish her dinner. To help her maintain sufficient nourishment, the nurse should:",
+  options: [
+    { text: "Serve high-calorie foods she can carry with her", tag: "SCFHS" },
+    { text: "Encourage her appetite by sending out for her favorite foods", tag: "NCLEX" },
+    { text: "Serve her small, attractively arranged portions", tag: "STR" },
+    { text: "Allow her in the unit kitchen for extra food whenever she pleases", tag: "SAFE_DELAY" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Manic clients benefit from portable, high-calorie foods due to hyperactivity.",
+    distractors: {
+      NCLEX: "Favorite foods do not address inability to sit still.",
+      STR: "Presentation does not overcome distractibility.",
+      SAFE_DELAY: "Unrestricted access is unsafe."
+    }
+  }
+},
+{
+  q: "180. To maintain Bryant’s traction, the nurse must make certain that the child’s:",
+  options: [
+    { text: "Hips are resting on the bed with legs suspended at a right angle", tag: "SAFE_DELAY" },
+    { text: "Hips are slightly elevated above the bed and legs suspended at a right angle", tag: "SCFHS" },
+    { text: "Hips are elevated on a pillow with legs parallel to the bed", tag: "NCLEX" },
+    { text: "Hips and legs are flat on the bed", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Proper Bryant’s traction requires hips elevated and legs suspended vertically.",
+    distractors: {
+      SAFE_DELAY: "Hips must not rest flat on the bed.",
+      NCLEX: "Legs should not be parallel.",
+      STR: "Flat positioning defeats traction."
+    }
+  }
+},
+{
+  q: "181. Which action by the nurse indicates understanding of herpes zoster?",
+  options: [
+    { text: "Covers lesions with a sterile dressing", tag: "SAFE_DELAY" },
+    { text: "Wears gloves when providing care", tag: "SCFHS" },
+    { text: "Administers a prescribed antibiotic", tag: "NCLEX" },
+    { text: "Administers oxygen", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Herpes zoster requires contact precautions including glove use.",
+    distractors: {
+      SAFE_DELAY: "Sterile dressings are not required.",
+      NCLEX: "Antibiotics do not treat viral infections.",
+      STR: "Oxygen is unrelated."
+    }
+  }
+},
+{
+  q: "182. There is an order for a trough to be drawn on the client receiving Vancomycin. The nurse should contact the lab to collect the blood:",
+  options: [
+    { text: "15 minutes after the infusion", tag: "SAFE_DELAY" },
+    { text: "30 minutes before the fourth infusion", tag: "SCFHS" },
+    { text: "One hour after the infusion", tag: "NCLEX" },
+    { text: "Two hours after the infusion", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Vancomycin trough levels are drawn just before the next dose.",
+    distractors: {
+      SAFE_DELAY: "This timing reflects peak levels.",
+      NCLEX: "Too late to reflect trough.",
+      STR: "Not clinically useful timing."
+    }
+  }
+},
+{
+  q: "183. The client using a diaphragm should be instructed to:",
+  options: [
+    { text: "Refrain from keeping the diaphragm in longer than four hours", tag: "SAFE_DELAY" },
+    { text: "Keep the diaphragm in a cool location", tag: "STR" },
+    { text: "Have the diaphragm resized if she gains five pounds", tag: "NCLEX" },
+    { text: "Have the diaphragm resized if she has any surgery", tag: "SCFHS" }
+  ],
+  correctTag: "NCLEX",
+  rationale: {
+    correct: "Weight changes can alter fit, requiring resizing.",
+    distractors: {
+      SAFE_DELAY: "It must remain in place at least 6 hours after intercourse.",
+      STR: "Storage temperature is not the key teaching.",
+      SCFHS: "Surgery alone does not require resizing."
+    }
+  }
+},
+{
+  q: "184. The nurse is providing postpartum teaching for a mother planning to breastfeed. Which statement indicates the need for additional teaching?",
+  options: [
+    { text: "I'm wearing a support bra", tag: "STR" },
+    { text: "I'm expressing milk from my breast", tag: "NCLEX" },
+    { text: "I'm drinking four glasses of fluid during a 24-hour period", tag: "SCFHS" },
+    { text: "I'll allow water to run over my breasts in the shower", tag: "SAFE_DELAY" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Adequate fluid intake is essential; four glasses is insufficient.",
+    distractors: {
+      STR: "Support bras are appropriate.",
+      NCLEX: "Milk expression is normal.",
+      SAFE_DELAY: "Warm water is acceptable."
+    }
+  }
+},
+{
+  q: "185. Damage to the VII cranial nerve results in:",
+  options: [
+    { text: "Facial pain", tag: "SAFE_DELAY" },
+    { text: "Absence of ability to smell", tag: "NCLEX" },
+    { text: "Absence of eye movement", tag: "STR" },
+    { text: "Tinnitus", tag: "SCFHS" }
+  ],
+  correctTag: "SAFE_DELAY",
+  rationale: {
+    correct: "Cranial nerve VII damage affects facial movement and sensation.",
+    distractors: {
+      NCLEX: "Smell is CN I.",
+      STR: "Eye movement is CN III, IV, VI.",
+      SCFHS: "Tinnitus is CN VIII."
+    }
+  }
+},
+{
+  q: "186. A client receiving Pyridium (phenazopyridine) should be taught that the medication may:",
+  options: [
+    { text: "Cause diarrhea", tag: "SAFE_DELAY" },
+    { text: "Change the color of her urine", tag: "SCFHS" },
+    { text: "Cause mental confusion", tag: "NCLEX" },
+    { text: "Cause changes in taste", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Pyridium causes orange or red discoloration of urine.",
+    distractors: {
+      SAFE_DELAY: "Diarrhea is not typical.",
+      NCLEX: "Confusion is not expected.",
+      STR: "Taste changes are uncommon."
+    }
+  }
+},
+{
+  q: "187. Which test should be performed before beginning Accutane therapy?",
+  options: [
+    { text: "Check calcium level", tag: "SAFE_DELAY" },
+    { text: "Perform a pregnancy test", tag: "SCFHS" },
+    { text: "Monitor apical pulse", tag: "NCLEX" },
+    { text: "Obtain creatinine level", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Accutane is highly teratogenic; pregnancy must be ruled out.",
+    distractors: {
+      SAFE_DELAY: "Calcium is unrelated.",
+      NCLEX: "Pulse monitoring is not required.",
+      STR: "Creatinine is not primary."
+    }
+  }
+},
+{
+  q: "188. A client with AIDS is taking Zovirax (acyclovir). Which nursing intervention is most critical?",
+  options: [
+    { text: "Limit the client’s activity", tag: "SAFE_DELAY" },
+    { text: "Encourage a high-carbohydrate diet", tag: "STR" },
+    { text: "Use an incentive spirometer", tag: "NCLEX" },
+    { text: "Encourage fluids", tag: "SCFHS" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Acyclovir can cause nephrotoxicity; hydration is essential.",
+    distractors: {
+      SAFE_DELAY: "Activity restriction is unnecessary.",
+      STR: "Dietary carbs are unrelated.",
+      NCLEX: "Spirometry is not indicated."
+    }
+  }
+},
+{
+  q: "189. A client is admitted for a CAT scan. The nurse should question the client regarding:",
+  options: [
+    { text: "Pregnancy", tag: "SCFHS" },
+    { text: "Titanium hip replacement", tag: "NCLEX" },
+    { text: "Allergies to antibiotics", tag: "SAFE_DELAY" },
+    { text: "Inability to move his feet", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Radiation exposure may harm a fetus.",
+    distractors: {
+      NCLEX: "Titanium implants are safe.",
+      SAFE_DELAY: "Antibiotic allergy is unrelated.",
+      STR: "Mobility does not affect scanning."
+    }
+  }
+},
+{
+  q: "190. The nurse is caring for a client receiving Amphotericin B. Which indicates drug toxicity?",
+  options: [
+    { text: "Changes in vision", tag: "SAFE_DELAY" },
+    { text: "Nausea", tag: "NCLEX" },
+    { text: "Urinary frequency", tag: "SCFHS" },
+    { text: "Changes in skin color", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Amphotericin B is nephrotoxic; urinary changes signal toxicity.",
+    distractors: {
+      SAFE_DELAY: "Vision changes are uncommon.",
+      NCLEX: "Nausea is a common side effect.",
+      STR: "Skin color change is unrelated."
+    }
+  }
+},
+{
+  q: "191. Which client should the nurse visit first?",
+  options: [
+    { text: "Client with diabetes and glucose 95 mg/dL", tag: "SAFE_DELAY" },
+    { text: "Client with hypertension on Lisinopril", tag: "STR" },
+    { text: "Client with chest pain and history of angina", tag: "SCFHS" },
+    { text: "Client with Raynaud’s disease", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Chest pain with angina history indicates potential life-threatening ischemia.",
+    distractors: {
+      SAFE_DELAY: "Glucose level is normal.",
+      STR: "Stable hypertension is not urgent.",
+      NCLEX: "Raynaud’s is chronic."
+    }
+  }
+},
+{
+  q: "192. A client with cystic fibrosis is taking pancreatic enzymes. The nurse should administer this medication:",
+  options: [
+    { text: "Once per day in the morning", tag: "SAFE_DELAY" },
+    { text: "Three times per day with meals", tag: "SCFHS" },
+    { text: "Once per day at bedtime", tag: "NCLEX" },
+    { text: "Four times per day", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Pancreatic enzymes must be taken with meals for digestion.",
+    distractors: {
+      SAFE_DELAY: "Once daily is insufficient.",
+      NCLEX: "Bedtime dosing is ineffective.",
+      STR: "Timing must match meals."
+    }
+  }
+},
+{
+  q: "193. Cataracts result in opacity of the crystalline lens. What is the function of the lens?",
+  options: [
+    { text: "Controls stimulation of the retina", tag: "SAFE_DELAY" },
+    { text: "Orchestrates eye movement", tag: "STR" },
+    { text: "Focuses light rays on the retina", tag: "SCFHS" },
+    { text: "Magnifies small objects", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "The lens focuses light onto the retina for clear vision.",
+    distractors: {
+      SAFE_DELAY: "Retinal stimulation is neural.",
+      STR: "Eye movement is muscular.",
+      NCLEX: "Magnification is not its role."
+    }
+  }
+},
+{
+  q: "194. A client with glaucoma is prescribed miotic eyedrops. The purpose is to:",
+  options: [
+    { text: "Anesthetize the cornea", tag: "SAFE_DELAY" },
+    { text: "Dilate the pupils", tag: "NCLEX" },
+    { text: "Constrict the pupils", tag: "SCFHS" },
+    { text: "Paralyze accommodation muscles", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Miotics constrict pupils, reducing intraocular pressure.",
+    distractors: {
+      SAFE_DELAY: "They do not anesthetize.",
+      NCLEX: "They do not dilate.",
+      STR: "They do not paralyze accommodation."
+    }
+  }
+},
+{
+  q: "195. A client with a corneal ulcer has orders for Gentamicin and Neomycin eye drops. Which schedule should be used?",
+  options: [
+    { text: "Allow five minutes between the two medications", tag: "SCFHS" },
+    { text: "Medications may be used together", tag: "SAFE_DELAY" },
+    { text: "Separate with a cycloplegic drug", tag: "NCLEX" },
+    { text: "Should not be used in the same client", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Eye drops should be separated to prevent dilution.",
+    distractors: {
+      SAFE_DELAY: "Drops should not be instilled simultaneously.",
+      NCLEX: "Cycloplegics are unnecessary.",
+      STR: "Both antibiotics may be prescribed together."
+    }
+  }
+},
+{
+  q: "196. The client with color blindness will most likely have problems distinguishing:",
+  options: [
+    { text: "Orange", tag: "SAFE_DELAY" },
+    { text: "Violet", tag: "STR" },
+    { text: "Red", tag: "SCFHS" },
+    { text: "White", tag: "NCLEX" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Red-green color blindness is the most common form.",
+    distractors: {
+      SAFE_DELAY: "Orange is less commonly affected.",
+      STR: "Violet is less affected.",
+      NCLEX: "White is not a color."
+    }
+  }
+},
+{
+  q: "197. The client with a pacemaker should be taught to:",
+  options: [
+    { text: "Report ankle edema", tag: "NCLEX" },
+    { text: "Check blood pressure daily", tag: "SAFE_DELAY" },
+    { text: "Refrain from using a microwave oven", tag: "STR" },
+    { text: "Monitor pulse rate", tag: "SCFHS" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Monitoring pulse ensures pacemaker function.",
+    distractors: {
+      NCLEX: "Edema may indicate heart failure, not pacemaker function.",
+      SAFE_DELAY: "BP monitoring is not primary.",
+      STR: "Microwaves are safe."
+    }
+  }
+},
+{
+  q: "198. The client with enuresis is being taught bladder retraining. The nurse should advise refraining from drinking after:",
+  options: [
+    { text: "1900", tag: "SCFHS" },
+    { text: "1200", tag: "SAFE_DELAY" },
+    { text: "1000", tag: "NCLEX" },
+    { text: "0700", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Limiting evening fluids helps reduce nighttime enuresis.",
+    distractors: {
+      SAFE_DELAY: "Too early to restrict fluids.",
+      NCLEX: "Excessive restriction.",
+      STR: "Unrealistic and unsafe."
+    }
+  }
+},
+{
+  q: "199. Which diet instruction should be given for recurring urinary tract infections?",
+  options: [
+    { text: "Increase intake of meats", tag: "SAFE_DELAY" },
+    { text: "Avoid citrus fruits", tag: "STR" },
+    { text: "Perform peri-care with hydrogen peroxide", tag: "NCLEX" },
+    { text: "Drink a glass of cranberry juice every day", tag: "SCFHS" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "Cranberry juice helps prevent bacterial adherence in UTIs.",
+    distractors: {
+      SAFE_DELAY: "Meat intake is unrelated.",
+      STR: "Citrus avoidance is unnecessary.",
+      NCLEX: "Hydrogen peroxide is unsafe."
+    }
+  }
+},
+{
+  q: "200. NPH insulin has been prescribed. Which statement shows the client understands when peak action occurs?",
+  options: [
+    { text: "I will eat breakfast within two hours of taking insulin", tag: "SAFE_DELAY" },
+    { text: "I will carry candy with me all the time", tag: "NCLEX" },
+    { text: "I will eat a snack around three o’clock each afternoon", tag: "SCFHS" },
+    { text: "I can save my dessert for a bedtime snack", tag: "STR" }
+  ],
+  correctTag: "SCFHS",
+  rationale: {
+    correct: "NPH peaks in the afternoon; a snack prevents hypoglycemia.",
+    distractors: {
+      SAFE_DELAY: "Breakfast timing reflects short-acting insulin.",
+      NCLEX: "General safety measure, not peak understanding.",
+      STR: "Bedtime snack aligns with long-acting insulin."
+    }
+  }
+},
+];
+
+// ================= ENGINE =================
+let shuffledQuestions = [];
+let currentIndex = 0;
+let selectedIndex = null;
+
+let score = { SCFHS:0, NCLEX:0, STR:0, SAFE_DELAY:0 };
+
+// ================= TIMER =================
+let totalTime = 20 * 60; // 20 minutes
+let timeLeft = totalTime;
+let timerInterval = null;
+
+function shuffle(arr) {
+  return [...arr].sort(() => Math.random() - 0.5);
+}
+
+function startExam() {
+  if (!candidateName.value.trim() || !candidateID.value.trim()) {
+    alert("Enter Name and ID");
+    return;
+  }
+
+  shuffledQuestions = shuffle(questions).map(q => ({
+    ...q,
+    options: shuffle(q.options)
+  }));
+
+  startScreen.classList.add("hidden");
+  examScreen.classList.remove("hidden");
+
+  startTimer();
+  loadQuestion();
+}
+
+function loadQuestion() {
+  selectedIndex = null;
+  rationaleBox.classList.add("hidden");
+  nextBtn.classList.add("hidden");
+
+  const q = shuffledQuestions[currentIndex];
+  qCounter.innerText = `Question ${currentIndex + 1} of ${shuffledQuestions.length}`;
+  questionText.innerText = q.q;
+
+  options.innerHTML = "";
+  q.options.forEach((opt, i) => {
+    const div = document.createElement("div");
+    div.className = "option";
+    div.innerText = opt.text;
+    div.onclick = () => selectOption(div, i);
+    options.appendChild(div);
+  });
+}
+
+function selectOption(div, index) {
+  document.querySelectorAll(".option").forEach(o => o.classList.remove("selected"));
+  div.classList.add("selected");
+  selectedIndex = index;
+}
+
+function submitAnswer() {
+  if (selectedIndex === null) {
+    alert("Select an option");
+    return;
+  }
+
+  const q = shuffledQuestions[currentIndex];
+  const chosen = q.options[selectedIndex];
+  const isCorrect = chosen.tag === q.correctTag;
+
+  score[chosen.tag]++;
+
+  document.querySelectorAll(".option").forEach((o, i) => {
+    if (q.options[i].tag === q.correctTag) o.classList.add("correct");
+    if (i === selectedIndex && !isCorrect) o.classList.add("wrong");
+  });
+
+  rationaleBox.classList.remove("hidden");
+  rationaleBox.innerHTML = isCorrect
+    ? `<b>Correct.</b><br><br>${q.rationale.correct}`
+    : `<b>Incorrect.</b><br><br>${q.rationale.distractors[chosen.tag]}
+       <hr><b>Correct Rationale:</b><br>${q.rationale.correct}`;
+
+  nextBtn.classList.remove("hidden");
+}
+
+function nextQuestion() {
+  currentIndex++;
+  currentIndex < shuffledQuestions.length ? loadQuestion() : showResult();
+}
+
+function startTimer() {
+  updateTimer();
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      autoEndExam();
+    }
+    updateTimer();
+  }, 1000);
+}
+
+function updateTimer() {
+  const min = Math.floor(timeLeft / 60);
+  const sec = timeLeft % 60;
+  timer.innerText = `Time Remaining: ${min}:${sec.toString().padStart(2,"0")}`;
+}
+
+function autoEndExam() {
+  if (selectedIndex !== null) submitAnswer();
+  setTimeout(showResult, 600);
+}
+
+function showResult() {
+  clearInterval(timerInterval);
+
+  examScreen.classList.add("hidden");
+  resultScreen.classList.remove("hidden");
+
+  const decision =
+    score.SCFHS >= score.NCLEX && score.SCFHS >= score.STR
+      ? "🟢 GO — SCFHS Ready"
+      : "🔴 NO-GO — Not SCFHS Ready";
+
+  finalReport.innerHTML = `
+    <b>Decision:</b> ${decision}<br><br>
+    <b>SCFHS Alignment:</b> ${score.SCFHS}<br>
+    <b>NCLEX Bias:</b> ${score.NCLEX}<br>
+    <b>STR Bias:</b> ${score.STR}<br><br>
+    <b>Examiner Interpretation:</b><br>
+    ${decision.includes("GO")
+      ? "Consistent prioritization aligned with SCFHS Prometric expectations."
+      : "Delayed or escalation-biased decision-making inconsistent with SCFHS standards."}
+  `;
+}
+</script>
+
+</body>
+</html>
